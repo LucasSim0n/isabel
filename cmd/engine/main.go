@@ -11,13 +11,9 @@ func main() {
 		fmt.Println(err)
 	}
 
-	fmt.Println(b.String())
-
-	moves := b.GenerateMoves()
-
-	for _, m := range *moves {
-		if m.Piece == board.King {
-			fmt.Printf("%d\n", m.To)
-		}
-	}
+	fmt.Println(b.Perft(1))
+	fmt.Println(b.Perft(2))
+	fmt.Println(b.Perft(3))
+	fmt.Println(b.Perft(4))
+	fmt.Println(b.Perft(5))
 }

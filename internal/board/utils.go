@@ -69,9 +69,11 @@ func squareToNotation(sq int) string {
 	return string([]rune{file, rank})
 }
 
-func getEnemy(c Color) Color {
+func getOpposite(c Color) Color {
 	if c == White {
 		return Black
 	}
 	return White
 }
+
+// func boardsEqual(a, b *Board) bool

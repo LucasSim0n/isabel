@@ -115,6 +115,112 @@ func NewBoard(fen string) (*Board, error) {
 	return b, nil
 }
 
+func (b *Board) updateOccupancy() {
+	b.Occupancy[White] = 0
+	b.Occupancy[Black] = 0
+
+	for i := range 6 {
+		b.Occupancy[White] |= b.Pieces[i]
+		b.Occupancy[Black] |= b.Pieces[i+6]
+	}
+
+	b.Occupancy[2] = b.Occupancy[White] | b.Occupancy[Black]
+}
+
+func (b *Board) MakeMove(move Move) Undo {
+
+	undo := Undo{
+		CastlingRights: b.CastlingRights,
+		EnPassant:      b.EnPassant,
+		Halfmove:       b.HalfmoveClock,
+		FullmoveNumber: b.FullmoveNumber,
+		Hash:           b.Hash,
+	}
+
+	color := b.SideToMove
+	enemy := getOpposite(b.SideToMove)
+
+	b.EnPassant = -1
+
+	if move.Flags&FlagCapture != 0 {
+		b.removePiece(move.Capture, enemy, move.To)
+		b.HalfmoveClock = 0
+
+		switch move.To {
+		case 0:
+			b.CastlingRights &= 0b1011
+		case 7:
+			b.CastlingRights &= 0b0111
+		case 56:
+			b.CastlingRights &= 0b1110
+		case 63:
+			b.CastlingRights &= 0b1101
+		}
+	}
+
+	if move.Flags&FlagEnPassant != 0 {
+		b.handleEnPassant(move)
+		b.HalfmoveClock = 0
+	}
+
+	b.movePiece(move.Piece, color, move.From, move.To)
+
+	if move.Flags&FlagCastling != 0 {
+		b.handleCastling(move.To)
+	}
+
+	if move.Piece == King {
+		b.KingSq[color] = uint8(move.To)
+
+		if color == White {
+			b.CastlingRights &= 0b0011
+		} else {
+			b.CastlingRights &= 0b1100
+		}
+	}
+
+	if move.Piece == Rook {
+		switch move.From {
+		case 0:
+			b.CastlingRights &= 0b1011
+		case 7:
+			b.CastlingRights &= 0b0111
+		case 56:
+			b.CastlingRights &= 0b1110
+		case 63:
+			b.CastlingRights &= 0b1101
+		}
+	}
+
+	if move.Flags&FlagDoublePawnPush != 0 {
+		if color == White {
+			b.EnPassant = move.To - 8
+		} else {
+			b.EnPassant = move.To + 8
+		}
+	}
+
+	if move.Piece == Pawn {
+		b.HalfmoveClock = 0
+	} else {
+		b.HalfmoveClock++
+	}
+
+	if move.Flags&FlagPromotion != 0 {
+		b.handlePromotion(move)
+	}
+
+	if color == Black {
+		b.FullmoveNumber++
+	}
+
+	b.SideToMove = enemy
+
+	b.updateOccupancy()
+
+	return undo
+}
+
 func (b *Board) movePiece(piece PieceType, color Color, from, to int) {
 	index := int(piece)
 	if color == Black {
@@ -138,70 +244,126 @@ func (b *Board) removePiece(piece PieceType, color Color, sq int) {
 	b.Pieces[index] &^= (1 << sq)
 }
 
-func (b *Board) MakeMove(move Move) Undo {
-
-	undo := Undo{
-		CastlingRights: b.CastlingRights,
-		EnPassant:      b.EnPassant,
-		Halfmove:       b.HalfmoveClock,
-		FullmoveNumber: b.FullmoveNumber,
-		Hash:           b.Hash,
+func (b *Board) handleCastling(sq int) {
+	switch sq {
+	case 2:
+		b.movePiece(Rook, b.SideToMove, 0, 3)
+	case 6:
+		b.movePiece(Rook, b.SideToMove, 7, 5)
+	case 58:
+		b.movePiece(Rook, b.SideToMove, 56, 59)
+	case 62:
+		b.movePiece(Rook, b.SideToMove, 63, 61)
 	}
+}
+
+func (b *Board) undoCastling(sq int) {
+	switch sq {
+	case 2:
+		b.movePiece(Rook, b.SideToMove, 3, 0)
+	case 6:
+		b.movePiece(Rook, b.SideToMove, 5, 7)
+	case 58:
+		b.movePiece(Rook, b.SideToMove, 59, 56)
+	case 62:
+		b.movePiece(Rook, b.SideToMove, 61, 63)
+	}
+}
+
+func (b *Board) handlePromotion(move Move) {
+	b.removePiece(Pawn, b.SideToMove, move.To)
+
+	index := move.Promotion
+	if b.SideToMove == Black {
+		index += 6
+	}
+
+	b.Pieces[index] |= (1 << move.To)
+}
+
+func (b *Board) undoPromotion(move Move) {
+	b.removePiece(move.Promotion, b.SideToMove, move.To)
+
+	index := Pawn
+	if b.SideToMove == Black {
+		index += 6
+	}
+
+	b.Pieces[index] |= (1 << move.To)
+}
+
+func (b *Board) handleEnPassant(move Move) {
+	var captureSq int
+
+	if b.SideToMove == White {
+		captureSq = move.To - 8
+	} else {
+		captureSq = move.To + 8
+	}
+
+	b.removePiece(Pawn, getOpposite(b.SideToMove), captureSq)
+}
+
+func (b *Board) undoEnPassant(move Move) {
+	var captureSq int
+	index := Pawn
+
+	if b.SideToMove == White {
+		captureSq = move.To - 8
+		index += 6
+	} else {
+		captureSq = move.To + 8
+	}
+
+	b.Pieces[index] |= (1 << captureSq)
+}
+
+func (b *Board) UnmakeMove(move Move, undo Undo) {
+	b.CastlingRights = undo.CastlingRights
+	b.EnPassant = undo.EnPassant
+	b.HalfmoveClock = undo.Halfmove
+	b.FullmoveNumber = undo.FullmoveNumber
+	b.Hash = undo.Hash
+
+	b.SideToMove = getOpposite(b.SideToMove)
 
 	color := b.SideToMove
-	enemy := getEnemy(b.SideToMove)
+	enemy := getOpposite(color)
 
-	b.EnPassant = -1
-
-	if move.Flags&FlagCapture != 0 {
-		b.removePiece(move.Capture, enemy, move.To)
-		b.HalfmoveClock = 0
+	if move.Flags&FlagPromotion != 0 {
+		b.undoPromotion(move)
 	}
 
-	b.movePiece(move.Piece, color, move.From, move.To)
+	b.movePiece(move.Piece, color, move.To, move.From)
+
+	if move.Flags&FlagEnPassant != 0 {
+		b.undoEnPassant(move)
+	}
 
 	if move.Piece == King {
-		b.KingSq[color] = uint8(move.To)
+		b.KingSq[color] = uint8(move.From)
 	}
 
-	if move.Flags&FlagDoublePawnPush != 0 {
-		if color == White {
-			b.EnPassant = move.To - 8
-		} else {
-			b.EnPassant = move.To + 8
+	if move.Flags&FlagCapture != 0 {
+
+		index := move.Capture
+
+		if enemy == Black {
+			index += 6
 		}
+
+		b.Pieces[index] |= (1 << move.To)
 	}
 
-	if move.Piece == Pawn {
-		b.HalfmoveClock = 0
-	} else {
-		b.HalfmoveClock++
+	if move.Flags&FlagCastling != 0 {
+		b.undoCastling(move.To)
 	}
-
-	if color == Black {
-		b.FullmoveNumber++
-	}
-
-	b.SideToMove = enemy
 
 	b.updateOccupancy()
 
-	return undo
 }
 
-func (b *Board) updateOccupancy() {
-	b.Occupancy[White] = 0
-	b.Occupancy[Black] = 0
-
-	for i := range 6 {
-		b.Occupancy[White] |= b.Pieces[i]
-		b.Occupancy[Black] |= b.Pieces[i+6]
-	}
-
-	b.Occupancy[2] = b.Occupancy[White] | b.Occupancy[Black]
-}
-
-func (b *Board) GenerateMoves() *[]Move {
+func (b *Board) GenerateMoves() []Move {
 	var moves []Move
 
 	b.generateKingMoves(&moves)
@@ -211,7 +373,29 @@ func (b *Board) GenerateMoves() *[]Move {
 	b.generateRookMoves(&moves)
 	b.generateQueenMoves(&moves)
 
-	return &moves
+	return moves
+}
+
+func (b *Board) GenerateLegalMoves() []Move {
+	var legal []Move
+
+	pseudo := b.GenerateMoves()
+
+	for _, move := range pseudo {
+		undo := b.MakeMove(move)
+
+		movedSide := getOpposite(b.SideToMove)
+
+		inCheck := b.IsSquareAttacked(int(b.KingSq[movedSide]), b.SideToMove)
+
+		b.UnmakeMove(move, undo)
+
+		if !inCheck {
+			legal = append(legal, move)
+		}
+	}
+
+	return legal
 }
 
 func (b *Board) IsSquareAttacked(sq int, by Color) bool {
@@ -365,9 +549,11 @@ func (b *Board) generateKingMoves(moves *[]Move) {
 func (b *Board) generateCastlingMoves(moves *[]Move) {
 	color := b.SideToMove
 
-	if color == White {
+	if color == White && !b.IsSquareAttacked(4, Black) {
 		if b.CastlingRights&0b1000 != 0 {
-			if ((b.Occupancy[2]>>5)&1 == 0) && ((b.Occupancy[2]>>6)&1 == 0) {
+			if ((b.Occupancy[2]>>5)&1 == 0) && ((b.Occupancy[2]>>6)&1 == 0) &&
+				!b.IsSquareAttacked(5, Black) &&
+				!b.IsSquareAttacked(6, Black) {
 				*moves = append(*moves, Move{
 					From:  4,
 					To:    6,
@@ -380,7 +566,9 @@ func (b *Board) generateCastlingMoves(moves *[]Move) {
 		if b.CastlingRights&0b0100 != 0 {
 			if ((b.Occupancy[2]>>3)&1 == 0) &&
 				((b.Occupancy[2]>>2)&1 == 0) &&
-				((b.Occupancy[2]>>1)&1 == 0) {
+				((b.Occupancy[2]>>1)&1 == 0) &&
+				!b.IsSquareAttacked(3, Black) &&
+				!b.IsSquareAttacked(2, Black) {
 				*moves = append(*moves, Move{
 					From:  4,
 					To:    2,
@@ -389,9 +577,11 @@ func (b *Board) generateCastlingMoves(moves *[]Move) {
 				})
 			}
 		}
-	} else {
+	} else if !b.IsSquareAttacked(60, White) {
 		if b.CastlingRights&0b0010 != 0 {
-			if ((b.Occupancy[2]>>61)&1 == 0) && ((b.Occupancy[2]>>62)&1 == 0) {
+			if ((b.Occupancy[2]>>61)&1 == 0) && ((b.Occupancy[2]>>62)&1 == 0) &&
+				!b.IsSquareAttacked(61, White) &&
+				!b.IsSquareAttacked(62, White) {
 				*moves = append(*moves, Move{
 					From:  60,
 					To:    62,
@@ -404,7 +594,9 @@ func (b *Board) generateCastlingMoves(moves *[]Move) {
 		if b.CastlingRights&0b0001 != 0 {
 			if ((b.Occupancy[2]>>59)&1 == 0) &&
 				((b.Occupancy[2]>>58)&1 == 0) &&
-				((b.Occupancy[2]>>57)&1 == 0) {
+				((b.Occupancy[2]>>57)&1 == 0) &&
+				!b.IsSquareAttacked(59, White) &&
+				!b.IsSquareAttacked(58, White) {
 				*moves = append(*moves, Move{
 					From:  60,
 					To:    58,
@@ -503,7 +695,7 @@ func (b *Board) generateQueenMoves(moves *[]Move) {
 
 func (b *Board) generatePawnMoves(moves *[]Move) {
 	color := b.SideToMove
-	enemy := getEnemy(color)
+	enemy := getOpposite(color)
 	forward := 8
 	index := Pawn
 
@@ -567,6 +759,16 @@ func (b *Board) generatePawnMoves(moves *[]Move) {
 		b.iteratePawnPromotions(leftProm, 7, true, moves)
 		b.iteratePawnPromotions(rightProm, 9, true, moves)
 
+		if b.EnPassant != -1 {
+			epBB := Bitboard(1) << b.EnPassant
+
+			leftEP := left & epBB
+			rightEP := right & epBB
+
+			b.iterateEnPassant(leftEP, 7, moves)
+			b.iterateEnPassant(rightEP, 9, moves)
+		}
+
 	} else {
 		left = (pawns >> 9) & notHFile
 		right = (pawns >> 7) & notAFile
@@ -582,6 +784,16 @@ func (b *Board) generatePawnMoves(moves *[]Move) {
 
 		b.iteratePawnPromotions(leftProm, -7, true, moves)
 		b.iteratePawnPromotions(rightProm, -9, true, moves)
+
+		if b.EnPassant != -1 {
+			epBB := Bitboard(1) << b.EnPassant
+
+			leftEP := left & epBB
+			rightEP := right & epBB
+
+			b.iterateEnPassant(leftEP, -7, moves)
+			b.iterateEnPassant(rightEP, -9, moves)
+		}
 	}
 }
 
@@ -641,9 +853,24 @@ func (b *Board) iteratePawnCaptures(bb Bitboard, offset int, moves *[]Move) {
 	}
 }
 
+func (b *Board) iterateEnPassant(bb Bitboard, offset int, moves *[]Move) {
+	for bb != 0 {
+		to := bits.TrailingZeros64(uint64(bb))
+		from := to - offset
+
+		move := NewMove(from, to, Pawn)
+
+		move.Flags |= FlagEnPassant
+
+		*moves = append(*moves, move)
+
+		bb &= bb - 1
+	}
+}
+
 func (b *Board) iterateMoves(from int, attacks Bitboard, piece PieceType, moves *[]Move) {
 
-	enemy := getEnemy(b.SideToMove)
+	enemy := getOpposite(b.SideToMove)
 
 	for attacks != 0 {
 		to := bits.TrailingZeros64(uint64(attacks))
@@ -673,9 +900,27 @@ func (b *Board) getPieceAt(sq int) PieceType {
 
 /*  TODO:
 // 	func (b *Board) ToFEN() string
-// 	func (b *Board) MakeMove(move *Move) *Board
-// 	func (b *Board) IsLegalMove(move *Move) bool
 */
+
+func (b *Board) Perft(depth int) int {
+	if depth == 0 {
+		return 1
+	}
+
+	nodes := 0
+
+	moves := b.GenerateLegalMoves()
+
+	for _, move := range moves {
+		undo := b.MakeMove(move)
+
+		nodes += b.Perft(depth - 1)
+
+		b.UnmakeMove(move, undo)
+	}
+
+	return nodes
+}
 
 func (b *Board) String() string {
 	var sb strings.Builder
@@ -721,6 +966,7 @@ func (b *Board) String() string {
 	fmt.Fprintf(&sb, "Halfmove clock: %d\n", b.HalfmoveClock)
 	fmt.Fprintf(&sb, "Fullmove number: %d\n", b.FullmoveNumber)
 	fmt.Fprintf(&sb, "White King: %s, Black King: %s\n", squareToNotation(int(b.KingSq[White])), squareToNotation(int(b.KingSq[Black])))
+	fmt.Fprintf(&sb, "White King: %d, Black King: %d\n", b.KingSq[White], b.KingSq[Black])
 
 	return sb.String()
 }
