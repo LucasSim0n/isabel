@@ -12,4 +12,12 @@ func main() {
 	}
 
 	fmt.Println(b.String())
+
+	moves := b.GenerateMoves()
+
+	for _, m := range *moves {
+		if m.Piece == board.Knight {
+			fmt.Printf("%d\n", m.To)
+		}
+	}
 }
