@@ -124,6 +124,7 @@ func (b *Board) GenerateMoves() *[]Move {
 
 	b.generateKingMoves(&moves)
 	b.generateKnightMoves(&moves)
+	b.generatePawnMoves(&moves)
 
 	return &moves
 }

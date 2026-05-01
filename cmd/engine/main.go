@@ -16,7 +16,7 @@ func main() {
 	moves := b.GenerateMoves()
 
 	for _, m := range *moves {
-		if m.Piece == board.Knight {
+		if m.Piece == board.King {
 			fmt.Printf("%d\n", m.To)
 		}
 	}
