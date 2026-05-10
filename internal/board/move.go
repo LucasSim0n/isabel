@@ -1,14 +1,22 @@
 package board
 
 type Move struct {
-	From uint8
-	To   uint8
+	From int
+	To   int
 
 	Piece     PieceType
 	Promotion PieceType
 	Capture   PieceType
 
 	Flags uint8
+}
+
+type Undo struct {
+	CastlingRights uint8
+	EnPassant      int
+	Halfmove       int
+	FullmoveNumber int
+	Hash           uint64
 }
 
 const (
@@ -21,8 +29,8 @@ const (
 
 func NewMove(from, to int, piece PieceType) Move {
 	return Move{
-		From:  uint8(from),
-		To:    uint8(to),
+		From:  from,
+		To:    to,
 		Piece: piece,
 	}
 }

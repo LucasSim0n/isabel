@@ -65,11 +65,7 @@ func NewBoard(fen string) (*Board, error) {
 		}
 	}
 
-	for i := range 6 {
-		b.Occupancy[White] |= b.Pieces[i]
-		b.Occupancy[Black] |= b.Pieces[i+6]
-	}
-	b.Occupancy[2] = b.Occupancy[White] | b.Occupancy[Black]
+	b.updateOccupancy()
 
 	whiteKingBB := b.Pieces[King]
 	b.KingSq[White] = uint8(bits.TrailingZeros64(uint64(whiteKingBB)))
@@ -119,14 +115,239 @@ func NewBoard(fen string) (*Board, error) {
 	return b, nil
 }
 
+func (b *Board) movePiece(piece PieceType, color Color, from, to int) {
+	index := int(piece)
+	if color == Black {
+		index += 6
+	}
+
+	fromBB := Bitboard(1) << from
+	toBB := Bitboard(1) << to
+
+	b.Pieces[index] &^= fromBB
+	b.Pieces[index] |= toBB
+}
+
+func (b *Board) removePiece(piece PieceType, color Color, sq int) {
+	index := int(piece)
+
+	if color == Black {
+		index += 6
+	}
+
+	b.Pieces[index] &^= (1 << sq)
+}
+
+func (b *Board) MakeMove(move Move) Undo {
+
+	undo := Undo{
+		CastlingRights: b.CastlingRights,
+		EnPassant:      b.EnPassant,
+		Halfmove:       b.HalfmoveClock,
+		FullmoveNumber: b.FullmoveNumber,
+		Hash:           b.Hash,
+	}
+
+	color := b.SideToMove
+	enemy := getEnemy(b.SideToMove)
+
+	b.EnPassant = -1
+
+	if move.Flags&FlagCapture != 0 {
+		b.removePiece(move.Capture, enemy, move.To)
+		b.HalfmoveClock = 0
+	}
+
+	b.movePiece(move.Piece, color, move.From, move.To)
+
+	if move.Piece == King {
+		b.KingSq[color] = uint8(move.To)
+	}
+
+	if move.Flags&FlagDoublePawnPush != 0 {
+		if color == White {
+			b.EnPassant = move.To - 8
+		} else {
+			b.EnPassant = move.To + 8
+		}
+	}
+
+	if move.Piece == Pawn {
+		b.HalfmoveClock = 0
+	} else {
+		b.HalfmoveClock++
+	}
+
+	if color == Black {
+		b.FullmoveNumber++
+	}
+
+	b.SideToMove = enemy
+
+	b.updateOccupancy()
+
+	return undo
+}
+
+func (b *Board) updateOccupancy() {
+	b.Occupancy[White] = 0
+	b.Occupancy[Black] = 0
+
+	for i := range 6 {
+		b.Occupancy[White] |= b.Pieces[i]
+		b.Occupancy[Black] |= b.Pieces[i+6]
+	}
+
+	b.Occupancy[2] = b.Occupancy[White] | b.Occupancy[Black]
+}
+
 func (b *Board) GenerateMoves() *[]Move {
 	var moves []Move
 
 	b.generateKingMoves(&moves)
 	b.generateKnightMoves(&moves)
 	b.generatePawnMoves(&moves)
+	b.generateBishopMoves(&moves)
+	b.generateRookMoves(&moves)
+	b.generateQueenMoves(&moves)
 
 	return &moves
+}
+
+func (b *Board) IsSquareAttacked(sq int, by Color) bool {
+
+	if by == White {
+		attackers := ((Bitboard(1) << sq) >> 7 & notAFile) |
+			((Bitboard(1) << sq) >> 9 & notHFile)
+
+		if attackers&b.Pieces[Pawn] != 0 {
+			return true
+		}
+	} else {
+		attackers := ((Bitboard(1) << sq) << 7 & notHFile) | ((Bitboard(1) << sq) << 9 & notAFile)
+
+		if attackers&b.Pieces[Pawn+6] != 0 {
+			return true
+		}
+	}
+
+	idx := 0
+	if by == Black {
+		idx = 6
+	}
+
+	knights := b.Pieces[int(Knight)+idx]
+
+	if knightAttacks[sq]&knights != 0 {
+		return true
+	}
+
+	king := b.KingSq[by]
+	if kingAttacks[king]&(1<<sq) != 0 {
+		return true
+	}
+
+	bishops := b.Pieces[int(Bishop)+idx] | b.Pieces[int(Queen)+idx]
+	if b.getBishopAttacks(sq)&bishops != 0 {
+		return true
+	}
+
+	rooks := b.Pieces[int(Rook)+idx] | b.Pieces[int(Queen)+idx]
+	if b.getRookAttacks(sq)&rooks != 0 {
+		return true
+	}
+
+	return false
+}
+
+func (b *Board) getBishopAttacks(sq int) Bitboard {
+	var attacks Bitboard
+
+	rank := sq / 8
+	file := sq % 8
+
+	for r, f := rank+1, file+1; r <= 7 && f <= 7; r, f = r+1, f+1 {
+		sq := r*8 + f
+		attacks |= 1 << sq
+
+		if (b.Occupancy[2]>>sq)&1 != 0 {
+			break
+		}
+	}
+
+	for r, f := rank+1, file-1; r <= 7 && f >= 0; r, f = r+1, f-1 {
+		sq := r*8 + f
+		attacks |= 1 << sq
+
+		if (b.Occupancy[2]>>sq)&1 != 0 {
+			break
+		}
+	}
+
+	for r, f := rank-1, file-1; r >= 0 && f >= 0; r, f = r-1, f-1 {
+		sq := r*8 + f
+		attacks |= 1 << sq
+
+		if (b.Occupancy[2]>>sq)&1 != 0 {
+			break
+		}
+	}
+
+	for r, f := rank-1, file+1; r >= 0 && f <= 7; r, f = r-1, f+1 {
+		sq := r*8 + f
+		attacks |= 1 << sq
+
+		if (b.Occupancy[2]>>sq)&1 != 0 {
+			break
+		}
+	}
+
+	return attacks
+}
+
+func (b *Board) getRookAttacks(sq int) Bitboard {
+	var attacks Bitboard
+
+	rank := sq / 8
+	file := sq % 8
+
+	for r := rank + 1; r <= 7; r++ {
+		sq := r*8 + file
+		attacks |= 1 << sq
+
+		if (b.Occupancy[2]>>sq)&1 != 0 {
+			break
+		}
+	}
+
+	for r := rank - 1; r >= 0; r-- {
+		sq := r*8 + file
+		attacks |= 1 << sq
+
+		if (b.Occupancy[2]>>sq)&1 != 0 {
+			break
+		}
+	}
+
+	for f := file + 1; f <= 7; f++ {
+		sq := rank*8 + f
+		attacks |= 1 << sq
+
+		if (b.Occupancy[2]>>sq)&1 != 0 {
+			break
+		}
+	}
+
+	for f := file - 1; f >= 0; f++ {
+		sq := rank*8 + f
+		attacks |= 1 << sq
+
+		if (b.Occupancy[2]>>sq)&1 != 0 {
+			break
+		}
+	}
+
+	return attacks
 }
 
 func (b *Board) generateKingMoves(moves *[]Move) {
@@ -145,7 +366,6 @@ func (b *Board) generateCastlingMoves(moves *[]Move) {
 	color := b.SideToMove
 
 	if color == White {
-		// King side (e1 -> g1)
 		if b.CastlingRights&0b1000 != 0 {
 			if ((b.Occupancy[2]>>5)&1 == 0) && ((b.Occupancy[2]>>6)&1 == 0) {
 				*moves = append(*moves, Move{
@@ -157,7 +377,6 @@ func (b *Board) generateCastlingMoves(moves *[]Move) {
 			}
 		}
 
-		// Queen side (e1 -> c1)
 		if b.CastlingRights&0b0100 != 0 {
 			if ((b.Occupancy[2]>>3)&1 == 0) &&
 				((b.Occupancy[2]>>2)&1 == 0) &&
@@ -171,7 +390,6 @@ func (b *Board) generateCastlingMoves(moves *[]Move) {
 			}
 		}
 	} else {
-		// Negro (simétrico)
 		if b.CastlingRights&0b0010 != 0 {
 			if ((b.Occupancy[2]>>61)&1 == 0) && ((b.Occupancy[2]>>62)&1 == 0) {
 				*moves = append(*moves, Move{
@@ -217,6 +435,72 @@ func (b *Board) generateKnightMoves(moves *[]Move) {
 	}
 }
 
+func (b *Board) generateBishopMoves(moves *[]Move) {
+	color := b.SideToMove
+
+	index := Bishop
+	if color == Black {
+		index += 6
+	}
+
+	bb := b.Pieces[index]
+
+	for bb != 0 {
+		from := bits.TrailingZeros64(uint64(bb))
+
+		attacks := b.getBishopAttacks(from)
+		attacks &= ^b.Occupancy[color]
+
+		b.iterateMoves(from, attacks, Bishop, moves)
+
+		bb &= bb - 1
+	}
+}
+
+func (b *Board) generateRookMoves(moves *[]Move) {
+	color := b.SideToMove
+
+	index := Rook
+	if color == Black {
+		index += 6
+	}
+
+	bb := b.Pieces[index]
+
+	for bb != 0 {
+		from := bits.TrailingZeros64(uint64(bb))
+
+		attacks := b.getRookAttacks(from)
+		attacks &= ^b.Occupancy[color]
+
+		b.iterateMoves(from, attacks, Rook, moves)
+
+		bb &= bb - 1
+	}
+}
+
+func (b *Board) generateQueenMoves(moves *[]Move) {
+	color := b.SideToMove
+
+	index := Queen
+	if color == Black {
+		index += 6
+	}
+
+	bb := b.Pieces[index]
+
+	for bb != 0 {
+		from := bits.TrailingZeros64(uint64(bb))
+
+		attacks := b.getRookAttacks(from) | b.getBishopAttacks(from)
+		attacks &= ^b.Occupancy[color]
+
+		b.iterateMoves(from, attacks, Queen, moves)
+
+		bb &= bb - 1
+	}
+}
+
 func (b *Board) generatePawnMoves(moves *[]Move) {
 	color := b.SideToMove
 	enemy := getEnemy(color)
@@ -232,21 +516,25 @@ func (b *Board) generatePawnMoves(moves *[]Move) {
 
 	empty := ^b.Occupancy[2]
 
-	// =====================
-	// 1. SIMPLE PUSH
-	// =====================
 	var singlePush Bitboard
 	if color == White {
 		singlePush = (pawns << 8) & empty
+
+		promotions := singlePush & rank8
+		normal := singlePush & ^rank8
+		b.iteratePawnMoves(normal, forward, moves)
+		b.iteratePawnPromotions(promotions, forward, false, moves)
+
 	} else {
 		singlePush = (pawns >> 8) & empty
+
+		promotions := singlePush & rank1
+		normal := singlePush & ^rank1
+
+		b.iteratePawnMoves(normal, forward, moves)
+		b.iteratePawnPromotions(promotions, forward, false, moves)
 	}
 
-	b.iteratePawnMoves(singlePush, forward, moves)
-
-	// =====================
-	// 2. DOUBLE PUSH
-	// =====================
 	if color == White {
 		p := pawns & rank2
 		s1 := (p << 8) & empty
@@ -261,24 +549,63 @@ func (b *Board) generatePawnMoves(moves *[]Move) {
 		b.iteratePawnMoves(doublePush, forward*2, moves)
 	}
 
-	// =====================
-	// 3. CAPTURES
-	// =====================
 	var left, right Bitboard
 
 	if color == White {
-		left = (pawns << 7) & notHFile & b.Occupancy[enemy]
-		right = (pawns << 9) & notAFile & b.Occupancy[enemy]
+		left = (pawns << 7) & notHFile
+		right = (pawns << 9) & notAFile
 
-		b.iteratePawnCaptures(left, 7, moves)
-		b.iteratePawnCaptures(right, 9, moves)
+		leftProm := left & rank8 & b.Occupancy[enemy]
+		rightProm := right & rank8 & b.Occupancy[enemy]
+
+		leftNorm := left & ^rank8 & b.Occupancy[enemy]
+		rightNorm := right & ^rank8 & b.Occupancy[enemy]
+
+		b.iteratePawnCaptures(leftNorm, 7, moves)
+		b.iteratePawnCaptures(rightNorm, 9, moves)
+
+		b.iteratePawnPromotions(leftProm, 7, true, moves)
+		b.iteratePawnPromotions(rightProm, 9, true, moves)
 
 	} else {
-		left = (pawns >> 9) & notHFile & b.Occupancy[enemy]
-		right = (pawns >> 7) & notAFile & b.Occupancy[enemy]
+		left = (pawns >> 9) & notHFile
+		right = (pawns >> 7) & notAFile
 
-		b.iteratePawnCaptures(left, -7, moves)
-		b.iteratePawnCaptures(right, -9, moves)
+		leftProm := left & rank1 & b.Occupancy[enemy]
+		rightProm := right & rank1 & b.Occupancy[enemy]
+
+		leftNorm := left & ^rank1 & b.Occupancy[enemy]
+		rightNorm := right & ^rank1 & b.Occupancy[enemy]
+
+		b.iteratePawnCaptures(leftNorm, -7, moves)
+		b.iteratePawnCaptures(rightNorm, -9, moves)
+
+		b.iteratePawnPromotions(leftProm, -7, true, moves)
+		b.iteratePawnPromotions(rightProm, -9, true, moves)
+	}
+}
+
+func (b *Board) iteratePawnPromotions(bb Bitboard, offset int, isCapture bool, moves *[]Move) {
+	for bb != 0 {
+		to := bits.TrailingZeros64(uint64(bb))
+		from := to - offset
+
+		promotions := []PieceType{Queen, Rook, Bishop, Knight}
+
+		for _, promo := range promotions {
+			move := NewMove(from, to, Pawn)
+			move.Flags |= FlagPromotion
+			move.Promotion = promo
+
+			if isCapture {
+				move.Flags |= FlagCapture
+				move.Capture = b.getPieceAt(to)
+			}
+
+			*moves = append(*moves, move)
+		}
+
+		bb &= bb - 1
 	}
 }
 

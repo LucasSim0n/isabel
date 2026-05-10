@@ -4,14 +4,14 @@ import "fmt"
 
 type Bitboard uint64
 
-type Color int
+type Color uint8
 
 const (
 	White Color = iota
 	Black
 )
 
-type PieceType uint
+type PieceType uint8
 
 const (
 	Pawn PieceType = iota
@@ -33,8 +33,10 @@ var pieceCharMap = map[rune]struct {
 }
 
 const (
+	rank1 Bitboard = 0x00000000000000FF
 	rank2 Bitboard = 0x000000000000FF00
 	rank7 Bitboard = 0x00FF000000000000
+	rank8 Bitboard = 0xFF00000000000000
 
 	notAFile Bitboard = 0xfefefefefefefefe
 	notHFile Bitboard = 0x7f7f7f7f7f7f7f7f
