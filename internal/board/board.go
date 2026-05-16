@@ -159,14 +159,14 @@ func (b *Board) MakeMove(move Move) Undo {
 	}
 
 	if move.Flags&FlagEnPassant != 0 {
-		b.handleEnPassant(move)
+		b.handleEnPassant(move, color)
 		b.HalfmoveClock = 0
 	}
 
 	b.movePiece(move.Piece, color, move.From, move.To)
 
 	if move.Flags&FlagCastling != 0 {
-		b.handleCastling(move.To)
+		b.handleCastling(move.To, color)
 	}
 
 	if move.Piece == King {
@@ -244,29 +244,29 @@ func (b *Board) removePiece(piece PieceType, color Color, sq int) {
 	b.Pieces[index] &^= (1 << sq)
 }
 
-func (b *Board) handleCastling(sq int) {
+func (b *Board) handleCastling(sq int, c Color) {
 	switch sq {
 	case 2:
-		b.movePiece(Rook, b.SideToMove, 0, 3)
+		b.movePiece(Rook, c, 0, 3)
 	case 6:
-		b.movePiece(Rook, b.SideToMove, 7, 5)
+		b.movePiece(Rook, c, 7, 5)
 	case 58:
-		b.movePiece(Rook, b.SideToMove, 56, 59)
+		b.movePiece(Rook, c, 56, 59)
 	case 62:
-		b.movePiece(Rook, b.SideToMove, 63, 61)
+		b.movePiece(Rook, c, 63, 61)
 	}
 }
 
-func (b *Board) undoCastling(sq int) {
+func (b *Board) undoCastling(sq int, c Color) {
 	switch sq {
 	case 2:
-		b.movePiece(Rook, b.SideToMove, 3, 0)
+		b.movePiece(Rook, c, 3, 0)
 	case 6:
-		b.movePiece(Rook, b.SideToMove, 5, 7)
+		b.movePiece(Rook, c, 5, 7)
 	case 58:
-		b.movePiece(Rook, b.SideToMove, 59, 56)
+		b.movePiece(Rook, c, 59, 56)
 	case 62:
-		b.movePiece(Rook, b.SideToMove, 61, 63)
+		b.movePiece(Rook, c, 61, 63)
 	}
 }
 
@@ -292,16 +292,16 @@ func (b *Board) undoPromotion(move Move) {
 	b.Pieces[index] |= (1 << move.To)
 }
 
-func (b *Board) handleEnPassant(move Move) {
+func (b *Board) handleEnPassant(move Move, c Color) {
 	var captureSq int
 
-	if b.SideToMove == White {
+	if c == White {
 		captureSq = move.To - 8
 	} else {
 		captureSq = move.To + 8
 	}
 
-	b.removePiece(Pawn, getOpposite(b.SideToMove), captureSq)
+	b.removePiece(Pawn, getOpposite(c), captureSq)
 }
 
 func (b *Board) undoEnPassant(move Move) {
@@ -356,7 +356,7 @@ func (b *Board) UnmakeMove(move Move, undo Undo) {
 	}
 
 	if move.Flags&FlagCastling != 0 {
-		b.undoCastling(move.To)
+		b.undoCastling(move.To, color)
 	}
 
 	b.updateOccupancy()
@@ -400,6 +400,11 @@ func (b *Board) GenerateLegalMoves() []Move {
 
 func (b *Board) IsSquareAttacked(sq int, by Color) bool {
 
+	index := 0
+	if by == Black {
+		index = 6
+	}
+
 	if by == White {
 		attackers := ((Bitboard(1) << sq) >> 7 & notAFile) |
 			((Bitboard(1) << sq) >> 9 & notHFile)
@@ -410,14 +415,9 @@ func (b *Board) IsSquareAttacked(sq int, by Color) bool {
 	} else {
 		attackers := ((Bitboard(1) << sq) << 7 & notHFile) | ((Bitboard(1) << sq) << 9 & notAFile)
 
-		if attackers&b.Pieces[Pawn+6] != 0 {
+		if attackers&b.Pieces[int(Pawn)+index] != 0 {
 			return true
 		}
-	}
-
-	index := 0
-	if by == Black {
-		index = 6
 	}
 
 	knights := b.Pieces[int(Knight)+index]
@@ -522,7 +522,7 @@ func (b *Board) getRookAttacks(sq int) Bitboard {
 		}
 	}
 
-	for f := file - 1; f >= 0; f++ {
+	for f := file - 1; f >= 0; f-- {
 		sq := rank*8 + f
 		attacks |= 1 << sq
 
@@ -549,32 +549,34 @@ func (b *Board) generateKingMoves(moves *[]Move) {
 func (b *Board) generateCastlingMoves(moves *[]Move) {
 	color := b.SideToMove
 
-	if color == White && !b.IsSquareAttacked(4, Black) {
-		if b.CastlingRights&0b1000 != 0 {
-			if ((b.Occupancy[2]>>5)&1 == 0) && ((b.Occupancy[2]>>6)&1 == 0) &&
-				!b.IsSquareAttacked(5, Black) &&
-				!b.IsSquareAttacked(6, Black) {
-				*moves = append(*moves, Move{
-					From:  4,
-					To:    6,
-					Piece: King,
-					Flags: FlagCastling,
-				})
+	if color == White {
+		if !b.IsSquareAttacked(4, Black) {
+			if b.CastlingRights&0b1000 != 0 {
+				if ((b.Occupancy[2]>>5)&1 == 0) && ((b.Occupancy[2]>>6)&1 == 0) &&
+					!b.IsSquareAttacked(5, Black) &&
+					!b.IsSquareAttacked(6, Black) {
+					*moves = append(*moves, Move{
+						From:  4,
+						To:    6,
+						Piece: King,
+						Flags: FlagCastling,
+					})
+				}
 			}
-		}
 
-		if b.CastlingRights&0b0100 != 0 {
-			if ((b.Occupancy[2]>>3)&1 == 0) &&
-				((b.Occupancy[2]>>2)&1 == 0) &&
-				((b.Occupancy[2]>>1)&1 == 0) &&
-				!b.IsSquareAttacked(3, Black) &&
-				!b.IsSquareAttacked(2, Black) {
-				*moves = append(*moves, Move{
-					From:  4,
-					To:    2,
-					Piece: King,
-					Flags: FlagCastling,
-				})
+			if b.CastlingRights&0b0100 != 0 {
+				if ((b.Occupancy[2]>>3)&1 == 0) &&
+					((b.Occupancy[2]>>2)&1 == 0) &&
+					((b.Occupancy[2]>>1)&1 == 0) &&
+					!b.IsSquareAttacked(3, Black) &&
+					!b.IsSquareAttacked(2, Black) {
+					*moves = append(*moves, Move{
+						From:  4,
+						To:    2,
+						Piece: King,
+						Flags: FlagCastling,
+					})
+				}
 			}
 		}
 	} else if !b.IsSquareAttacked(60, White) {

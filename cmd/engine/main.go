@@ -3,19 +3,17 @@ package main
 import (
 	"chess/internal/board"
 	"fmt"
+	"log"
 )
 
+// r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -
+// rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+
 func main() {
-	b, err := board.NewBoard("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+	b, err := board.NewBoard("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
 
 	fmt.Println(b.PerftDivide(5))
-
-	// fmt.Println(b.Perft(1))
-	// fmt.Println(b.Perft(2))
-	// fmt.Println(b.Perft(3))
-	// fmt.Println(b.Perft(4))
-	// fmt.Println(b.Perft(5))
 }
