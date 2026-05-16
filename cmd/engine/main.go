@@ -11,9 +11,11 @@ func main() {
 		fmt.Println(err)
 	}
 
-	fmt.Println(b.Perft(1))
-	fmt.Println(b.Perft(2))
-	fmt.Println(b.Perft(3))
-	fmt.Println(b.Perft(4))
-	fmt.Println(b.Perft(5))
+	fmt.Println(b.PerftDivide(5))
+
+	// fmt.Println(b.Perft(1))
+	// fmt.Println(b.Perft(2))
+	// fmt.Println(b.Perft(3))
+	// fmt.Println(b.Perft(4))
+	// fmt.Println(b.Perft(5))
 }

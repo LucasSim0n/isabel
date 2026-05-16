@@ -40,7 +40,7 @@ func generateKingAttacks(sq int) Bitboard {
 
 	for _, m := range moves {
 		r := rank + m[0]
-		f := file + m[0]
+		f := file + m[1]
 
 		if r >= 0 && r < 8 && f >= 0 && f < 8 {
 			attacks |= 1 << (r*8 + f)

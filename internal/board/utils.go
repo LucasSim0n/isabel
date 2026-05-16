@@ -75,5 +75,3 @@ func getOpposite(c Color) Color {
 	}
 	return White
 }
-
-// func boardsEqual(a, b *Board) bool

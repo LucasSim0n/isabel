@@ -415,12 +415,12 @@ func (b *Board) IsSquareAttacked(sq int, by Color) bool {
 		}
 	}
 
-	idx := 0
+	index := 0
 	if by == Black {
-		idx = 6
+		index = 6
 	}
 
-	knights := b.Pieces[int(Knight)+idx]
+	knights := b.Pieces[int(Knight)+index]
 
 	if knightAttacks[sq]&knights != 0 {
 		return true
@@ -431,12 +431,12 @@ func (b *Board) IsSquareAttacked(sq int, by Color) bool {
 		return true
 	}
 
-	bishops := b.Pieces[int(Bishop)+idx] | b.Pieces[int(Queen)+idx]
+	bishops := b.Pieces[int(Bishop)+index] | b.Pieces[int(Queen)+index]
 	if b.getBishopAttacks(sq)&bishops != 0 {
 		return true
 	}
 
-	rooks := b.Pieces[int(Rook)+idx] | b.Pieces[int(Queen)+idx]
+	rooks := b.Pieces[int(Rook)+index] | b.Pieces[int(Queen)+index]
 	if b.getRookAttacks(sq)&rooks != 0 {
 		return true
 	}
@@ -779,11 +779,11 @@ func (b *Board) generatePawnMoves(moves *[]Move) {
 		leftNorm := left & ^rank1 & b.Occupancy[enemy]
 		rightNorm := right & ^rank1 & b.Occupancy[enemy]
 
-		b.iteratePawnCaptures(leftNorm, -7, moves)
-		b.iteratePawnCaptures(rightNorm, -9, moves)
+		b.iteratePawnCaptures(leftNorm, -9, moves)
+		b.iteratePawnCaptures(rightNorm, -7, moves)
 
-		b.iteratePawnPromotions(leftProm, -7, true, moves)
-		b.iteratePawnPromotions(rightProm, -9, true, moves)
+		b.iteratePawnPromotions(leftProm, -9, true, moves)
+		b.iteratePawnPromotions(rightProm, -7, true, moves)
 
 		if b.EnPassant != -1 {
 			epBB := Bitboard(1) << b.EnPassant
@@ -791,8 +791,8 @@ func (b *Board) generatePawnMoves(moves *[]Move) {
 			leftEP := left & epBB
 			rightEP := right & epBB
 
-			b.iterateEnPassant(leftEP, -7, moves)
-			b.iterateEnPassant(rightEP, -9, moves)
+			b.iterateEnPassant(leftEP, -9, moves)
+			b.iterateEnPassant(rightEP, -7, moves)
 		}
 	}
 }
@@ -859,7 +859,6 @@ func (b *Board) iterateEnPassant(bb Bitboard, offset int, moves *[]Move) {
 		from := to - offset
 
 		move := NewMove(from, to, Pawn)
-
 		move.Flags |= FlagEnPassant
 
 		*moves = append(*moves, move)
@@ -898,29 +897,120 @@ func (b *Board) getPieceAt(sq int) PieceType {
 	return Pawn
 }
 
-/*  TODO:
-// 	func (b *Board) ToFEN() string
-*/
-
-func (b *Board) Perft(depth int) int {
+func (b *Board) Perft(depth int) uint64 {
 	if depth == 0 {
 		return 1
 	}
 
-	nodes := 0
+	var nodes uint64
+
+	moves := b.GenerateLegalMoves()
+
+	for _, move := range moves {
+
+		before := b.Clone()
+
+		undo := b.MakeMove(move)
+
+		nodes += b.Perft(depth - 1)
+
+		b.UnmakeMove(move, undo)
+
+		if !before.Equals(b) {
+			fmt.Printf("Corruption after: %s depth=%d\n", move, depth)
+
+			fmt.Println("BEFORE:")
+			fmt.Println(before)
+
+			fmt.Println("AFTER:")
+			fmt.Println(b)
+		}
+	}
+
+	return nodes
+}
+
+func (b *Board) PerftDivide(depth int) uint64 {
+	if depth == 0 {
+		return 1
+	}
+
+	var total uint64
 
 	moves := b.GenerateLegalMoves()
 
 	for _, move := range moves {
 		undo := b.MakeMove(move)
 
-		nodes += b.Perft(depth - 1)
+		nodes := b.Perft(depth - 1)
 
 		b.UnmakeMove(move, undo)
+
+		fmt.Printf("%s: %d\n", move.String(), nodes)
+
+		total += nodes
 	}
 
-	return nodes
+	return total
 }
+
+func (b *Board) Clone() *Board {
+	c := *b
+	return &c
+}
+
+func (b *Board) Equals(other *Board) bool {
+
+	for i := range 12 {
+		if b.Pieces[i] != other.Pieces[i] {
+			fmt.Printf("Pieces[%d] mismatch\n", i)
+			return false
+		}
+	}
+
+	for i := range 3 {
+		if b.Occupancy[i] != other.Occupancy[i] {
+			fmt.Printf("Occupancy[%d] mismatch\n", i)
+			return false
+		}
+	}
+
+	if b.SideToMove != other.SideToMove {
+		fmt.Println("SideToMove mismatch")
+		return false
+	}
+
+	if b.CastlingRights != other.CastlingRights {
+		fmt.Println("CastlingRights mismatch")
+		return false
+	}
+
+	if b.EnPassant != other.EnPassant {
+		fmt.Println("EnPassant mismatch")
+		return false
+	}
+
+	if b.HalfmoveClock != other.HalfmoveClock {
+		fmt.Println("HalfmoveClock mismatch")
+		return false
+	}
+
+	if b.FullmoveNumber != other.FullmoveNumber {
+		fmt.Println("FullmoveNumber mismatch")
+		return false
+	}
+
+	if b.KingSq != other.KingSq {
+		fmt.Println("KingSq mismatch")
+		return false
+	}
+
+	return true
+}
+
+/*  TODO:
+// 	func (b *Board) ToFEN() string
+*/
 
 func (b *Board) String() string {
 	var sb strings.Builder
