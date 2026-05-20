@@ -1,7 +1,14 @@
 package board
 
+import "math/rand"
+
 var knightAttacks [64]Bitboard
 var kingAttacks [64]Bitboard
+
+var pieceKeys [12][64]uint64
+var castleKeys [16]uint64
+var epKeys [8]uint64
+var sideKey uint64
 
 func generateKnightAttacks(sq int) Bitboard {
 	var attacks Bitboard
@@ -55,4 +62,23 @@ func init() {
 		knightAttacks[sq] = generateKnightAttacks(sq)
 		kingAttacks[sq] = generateKingAttacks(sq)
 	}
+
+	/*** Init Zobrist ***/
+	rng := rand.New(rand.NewSource(1))
+
+	for p := range 12 {
+		for sq := range 64 {
+			pieceKeys[p][sq] = rng.Uint64()
+		}
+	}
+
+	for i := range 16 {
+		castleKeys[i] = rng.Uint64()
+	}
+
+	for i := range 8 {
+		epKeys[i] = rng.Uint64()
+	}
+
+	sideKey = rng.Uint64()
 }
