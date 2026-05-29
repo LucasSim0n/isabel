@@ -22,6 +22,18 @@ const (
 	King
 )
 
+var pieceValues = [6]int{
+	100, // Pawn
+	320, // Knight
+	330, // Bishop
+	500, // Rook
+	900, // Queen
+	0,   // King
+}
+
+const Infinity = 1000000
+const MateScore = 900000
+
 var pieceCharMap = map[rune]struct {
 	Type  PieceType
 	Color Color
