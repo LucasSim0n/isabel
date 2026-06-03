@@ -1,6 +1,7 @@
-package board
+package game
 
 import (
+	"errors"
 	"fmt"
 	"math/bits"
 	"strings"
@@ -42,6 +43,11 @@ func (b *Board) Evaluate() int {
 }
 
 func (b *Board) Search(depth, alpha, beta int) int {
+
+	if entry, ok := TTable.Probe(b.Hash, depth, alpha, beta); ok {
+		return entry.Score
+	}
+
 	if depth == 0 {
 		return b.Evaluate()
 	}
@@ -58,7 +64,26 @@ func (b *Board) Search(depth, alpha, beta int) int {
 		return 0
 	}
 
+	var ttMove Move
+	hasTTMove := false
+
+	if entry, ok := TTable.Get(b.Hash); ok {
+		ttMove = entry.Move
+		hasTTMove = true
+	}
+
+	if hasTTMove {
+		for i, move := range moves {
+			if ttMove == move {
+				moves[0], moves[i] = moves[i], moves[0]
+				break
+			}
+		}
+	}
+
 	bestScore := -Infinity
+	var bestMove Move
+	alphaOrig := alpha
 
 	for _, move := range moves {
 		undo := b.MakeMove(move)
@@ -73,6 +98,7 @@ func (b *Board) Search(depth, alpha, beta int) int {
 
 		if score > bestScore {
 			bestScore = score
+			bestMove = move
 		}
 
 		if score > alpha {
@@ -84,11 +110,25 @@ func (b *Board) Search(depth, alpha, beta int) int {
 		}
 	}
 
+	flag := Exact
+	switch {
+	case bestScore <= alphaOrig:
+		flag = UpperBound
+	case bestScore >= beta:
+		flag = LowerBound
+	}
+
+	TTable.Store(b.Hash, depth, bestScore, flag, bestMove)
+
 	return bestScore
 }
 
-func (b *Board) FindBestMove(depth int) Move {
+func (b *Board) FindBestMove(depth int) (Move, error) {
 	moves := b.GenerateLegalMoves()
+
+	if len(moves) == 0 {
+		return Move{}, errors.New("No legal moves found")
+	}
 
 	bestScore := -Infinity
 	bestMove := moves[0]
@@ -118,7 +158,7 @@ func (b *Board) FindBestMove(depth int) Move {
 		}
 	}
 
-	return bestMove
+	return bestMove, nil
 }
 
 func (b *Board) updateOccupancy() {

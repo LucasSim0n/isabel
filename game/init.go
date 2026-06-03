@@ -1,4 +1,4 @@
-package board
+package game
 
 import "math/rand"
 
@@ -9,6 +9,10 @@ var pieceKeys [12][64]uint64
 var castleKeys [16]uint64
 var epKeys [8]uint64
 var sideKey uint64
+
+var TTable = TranspositionTable{
+	Entries: make([]TTEntry, TTSize),
+}
 
 func generateKnightAttacks(sq int) Bitboard {
 	var attacks Bitboard

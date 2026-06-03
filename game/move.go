@@ -1,4 +1,4 @@
-package board
+package game
 
 type Move struct {
 	From int
@@ -38,29 +38,16 @@ func NewMove(from, to int, piece PieceType) Move {
 func (m Move) String() string {
 	s := squareToNotation(m.From) + squareToNotation(m.To)
 
-	switch m.Piece {
-	case Queen:
-		s = "q " + s
-	case Rook:
-		s = "r " + s
-	case Bishop:
-		s = "b " + s
-	case Knight:
-		s = "n " + s
-	case King:
-		s = "k " + s
-	}
-
 	if m.Flags&FlagPromotion != 0 {
 		switch m.Promotion {
 		case Queen:
-			s += "=q"
+			s += "q"
 		case Rook:
-			s += "=r"
+			s += "r"
 		case Bishop:
-			s += "=b"
+			s += "b"
 		case Knight:
-			s += "=n"
+			s += "n"
 		}
 	}
 	return s
