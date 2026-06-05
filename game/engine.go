@@ -58,15 +58,34 @@ func (e *Engine) HandleUCI() {
 func (e *Engine) HandlePosition(cmd string) {
 	tokens := strings.Fields(cmd)
 
-	e.board, _ = NewBoard(StartPos)
-
 	idx := -1
-
 	for i, t := range tokens {
 		if t == "moves" {
 			idx = i
 			break
 		}
+	}
+
+	switch tokens[1] {
+	case "startpos":
+		e.board, _ = NewBoard(StartPos)
+	case "fen":
+		var fen strings.Builder
+		endFen := len(tokens)
+
+		if idx != -1 {
+			endFen = idx
+		}
+		for _, s := range tokens[2:endFen] {
+			fen.WriteString(s)
+			fen.WriteString(" ")
+		}
+
+		b, err := NewBoard(fen.String())
+		if err != nil {
+			log.Fatalf("Error parsing fen: %s\n", err)
+		}
+		e.board = b
 	}
 
 	if idx == -1 {
@@ -88,11 +107,11 @@ func (e *Engine) HandleGo(cmd string) {
 		if fields[i] == "depth" {
 			d, _ := strconv.Atoi(fields[i+1])
 			depth = d
+			break
 		}
 	}
 
 	move, err := e.board.FindBestMove(depth)
-
 	if err != nil {
 		fmt.Println("bestmove 0000")
 		return
