@@ -7,17 +7,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/LucasSim0n/isabel/pkg/board"
 )
 
-type Engine struct {
-	board *Board
-}
-
-func NewEngine() *Engine {
-	return &Engine{}
-}
-
-func (e *Engine) Loop() {
+func (g *GameManager) Loop() {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for scanner.Scan() {
@@ -25,19 +19,19 @@ func (e *Engine) Loop() {
 
 		switch {
 		case line == "uci":
-			e.HandleUCI()
+			g.HandleUCI()
 
 		case line == "isready":
 			fmt.Println("readyok")
 
 		case line == "ucinewgame":
-			e.board, _ = NewBoard(StartPos)
+			g.board = board.NewStartPosGame()
 
 		case strings.HasPrefix(line, "position"):
-			e.HandlePosition(line)
+			g.HandlePosition(line)
 
 		case strings.HasPrefix(line, "go"):
-			e.HandleGo(line)
+			g.HandleGo(line)
 
 		case line == "quit":
 			return
@@ -49,13 +43,13 @@ func (e *Engine) Loop() {
 	}
 }
 
-func (e *Engine) HandleUCI() {
+func (g *GameManager) HandleUCI() {
 	fmt.Println("id name Isabel")
 	fmt.Println("id	author Elmago")
 	fmt.Println("uciok")
 }
 
-func (e *Engine) HandlePosition(cmd string) {
+func (g *GameManager) HandlePosition(cmd string) {
 	tokens := strings.Fields(cmd)
 
 	idx := -1
@@ -68,7 +62,8 @@ func (e *Engine) HandlePosition(cmd string) {
 
 	switch tokens[1] {
 	case "startpos":
-		e.board, _ = NewBoard(StartPos)
+		g.board = board.NewStartPosGame()
+
 	case "fen":
 		var fen strings.Builder
 		endFen := len(tokens)
@@ -77,15 +72,14 @@ func (e *Engine) HandlePosition(cmd string) {
 			endFen = idx
 		}
 		for _, s := range tokens[2:endFen] {
-			fen.WriteString(s)
-			fen.WriteString(" ")
+			fmt.Fprintf(&fen, "%s ", s)
 		}
 
-		b, err := NewBoard(fen.String())
+		b, err := board.NewFromFen(fen.String())
 		if err != nil {
 			log.Fatalf("Error parsing fen: %s\n", err)
 		}
-		e.board = b
+		g.board = b
 	}
 
 	if idx == -1 {
@@ -93,12 +87,12 @@ func (e *Engine) HandlePosition(cmd string) {
 	}
 
 	for _, moveStr := range tokens[idx+1:] {
-		move := e.parseMove(moveStr)
-		e.board.MakeMove(move)
+		move, _ := g.parseMove(moveStr)
+		g.board.MakeMove(move)
 	}
 }
 
-func (e *Engine) HandleGo(cmd string) {
+func (g *GameManager) HandleGo(cmd string) {
 	depth := 5
 
 	fields := strings.Fields(cmd)
@@ -111,23 +105,11 @@ func (e *Engine) HandleGo(cmd string) {
 		}
 	}
 
-	move, err := e.board.FindBestMove(depth)
+	move, err := g.searcher.FindBestMove(g.board, depth)
 	if err != nil {
 		fmt.Println("bestmove 0000")
 		return
 	}
 
 	fmt.Printf("bestmove %s\n", move.String())
-}
-
-func (e *Engine) parseMove(m string) Move {
-	legal := e.board.GenerateLegalMoves()
-
-	for _, move := range legal {
-		if move.String() == m {
-			return move
-		}
-	}
-
-	panic("illegal move")
 }

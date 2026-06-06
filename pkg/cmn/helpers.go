@@ -1,17 +1,39 @@
-package game
+package cmn
 
-import "math/rand"
+import "fmt"
 
-var knightAttacks [64]Bitboard
-var kingAttacks [64]Bitboard
+func NotationToSquare(notation string) (int, error) {
+	if len(notation) != 2 {
+		return 0, fmt.Errorf("invalid square notation: %s", notation)
+	}
 
-var pieceKeys [12][64]uint64
-var castleKeys [16]uint64
-var epKeys [8]uint64
-var sideKey uint64
+	fileChar := notation[0]
+	rankChar := notation[1]
 
-var TTable = TranspositionTable{
-	Entries: make([]TTEntry, TTSize),
+	file := int(fileChar - 'a')
+	rank := int(rankChar - '1')
+
+	if file < 0 || file > 7 || rank < 0 || rank > 7 {
+		return 0, fmt.Errorf("square notation out of bounds: %s", notation)
+	}
+
+	return rank*8 + file, nil
+}
+
+func SquareToNotation(sq int) string {
+	if sq < 0 || sq > 63 {
+		return "-"
+	}
+	file := rune('a' + (sq % 8))
+	rank := rune('1' + (sq / 8))
+	return string([]rune{file, rank})
+}
+
+func GetOpposite(c Color) Color {
+	if c == White {
+		return Black
+	}
+	return White
 }
 
 func generateKnightAttacks(sq int) Bitboard {
@@ -59,30 +81,4 @@ func generateKingAttacks(sq int) Bitboard {
 	}
 
 	return attacks
-}
-
-func init() {
-	for sq := range 64 {
-		knightAttacks[sq] = generateKnightAttacks(sq)
-		kingAttacks[sq] = generateKingAttacks(sq)
-	}
-
-	/*** Init Zobrist ***/
-	rng := rand.New(rand.NewSource(1))
-
-	for p := range 12 {
-		for sq := range 64 {
-			pieceKeys[p][sq] = rng.Uint64()
-		}
-	}
-
-	for i := range 16 {
-		castleKeys[i] = rng.Uint64()
-	}
-
-	for i := range 8 {
-		epKeys[i] = rng.Uint64()
-	}
-
-	sideKey = rng.Uint64()
 }

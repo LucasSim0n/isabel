@@ -1,4 +1,10 @@
-package game
+package cmn
+
+type Bitboard uint64
+
+type Color uint8
+
+type PieceType uint8
 
 type Move struct {
 	From int
@@ -19,14 +25,6 @@ type Undo struct {
 	Hash           uint64
 }
 
-const (
-	FlagCapture uint8 = 1 << iota
-	FlagDoublePawnPush
-	FlagEnPassant
-	FlagCastling
-	FlagPromotion
-)
-
 func NewMove(from, to int, piece PieceType) Move {
 	return Move{
 		From:  from,
@@ -36,7 +34,7 @@ func NewMove(from, to int, piece PieceType) Move {
 }
 
 func (m Move) String() string {
-	s := squareToNotation(m.From) + squareToNotation(m.To)
+	s := SquareToNotation(m.From) + SquareToNotation(m.To)
 
 	if m.Flags&FlagPromotion != 0 {
 		switch m.Promotion {

@@ -1,28 +1,20 @@
-package game
+package tt
+
+import "github.com/LucasSim0n/isabel/pkg/cmn"
 
 const TTSize = 1 << 20
-
-type TTFlag uint8
-
-const (
-	Exact TTFlag = iota
-	LowerBound
-	UpperBound
-)
-
-type TTEntry struct {
-	Hash  uint64
-	Flag  TTFlag
-	Depth int
-	Score int
-	Move  Move
-}
 
 type TranspositionTable struct {
 	Entries []TTEntry
 }
 
-func (tt *TranspositionTable) Store(hash uint64, depth int, score int, flag TTFlag, move Move) {
+func NewTT() *TranspositionTable {
+	return &TranspositionTable{
+		Entries: make([]TTEntry, TTSize),
+	}
+}
+
+func (tt *TranspositionTable) Store(hash uint64, depth int, score int, flag TTFlag, move cmn.Move) {
 	index := hash & (TTSize - 1)
 
 	tt.Entries[index] = TTEntry{

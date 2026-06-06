@@ -1,13 +1,15 @@
-package game
+package board
 
 import (
 	"fmt"
 	"math/bits"
 	"strconv"
 	"strings"
+
+	"github.com/LucasSim0n/isabel/pkg/cmn"
 )
 
-func NewBoard(fen string) (*Board, error) {
+func NewFromFen(fen string) (*Board, error) {
 	b := &Board{
 		EnPassant:      -1,
 		FullmoveNumber: 1,
@@ -30,7 +32,7 @@ func NewBoard(fen string) (*Board, error) {
 			file += num
 
 		} else {
-			pieceInfo, ok := pieceCharMap[char]
+			pieceInfo, ok := cmn.PieceCharMap[char]
 			if !ok {
 				return nil, fmt.Errorf("Unknown FEN char: %s", fen)
 			}
@@ -38,7 +40,7 @@ func NewBoard(fen string) (*Board, error) {
 			square := rank*8 + file
 
 			index := int(pieceInfo.Type)
-			if pieceInfo.Color == Black {
+			if pieceInfo.Color == cmn.Black {
 				index += 6
 			}
 
@@ -50,15 +52,15 @@ func NewBoard(fen string) (*Board, error) {
 
 	b.updateOccupancy()
 
-	whiteKingBB := b.Pieces[King]
-	b.KingSq[White] = uint8(bits.TrailingZeros64(uint64(whiteKingBB)))
+	whiteKingBB := b.Pieces[cmn.King]
+	b.KingSq[cmn.White] = uint8(bits.TrailingZeros64(uint64(whiteKingBB)))
 
-	blackKingBB := b.Pieces[King+6]
-	b.KingSq[Black] = uint8(bits.TrailingZeros64(uint64(blackKingBB)))
+	blackKingBB := b.Pieces[cmn.King+6]
+	b.KingSq[cmn.Black] = uint8(bits.TrailingZeros64(uint64(blackKingBB)))
 
-	b.SideToMove = White
+	b.SideToMove = cmn.White
 	if parts[1] == "b" {
-		b.SideToMove = Black
+		b.SideToMove = cmn.Black
 	}
 
 	b.CastlingRights = 0
@@ -76,7 +78,7 @@ func NewBoard(fen string) (*Board, error) {
 	}
 
 	if parts[3] != "-" {
-		s, err := notationToSquare(parts[3])
+		s, err := cmn.NotationToSquare(parts[3])
 		if err != nil {
 			return nil, fmt.Errorf("Incorrect fen: %s", fen)
 		}
@@ -102,4 +104,8 @@ func NewBoard(fen string) (*Board, error) {
 	b.Hash = b.ComputeHash()
 
 	return b, nil
+}
+
+func NewStartPosGame() *Board {
+	return startPosGame.Clone()
 }
