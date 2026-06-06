@@ -79,6 +79,18 @@ func (b *Board) IsSquareAttacked(sq int, by cmn.Color) bool {
 	return false
 }
 
+func (b *Board) isLegalMove(move cmn.Move) bool {
+	undo := b.MakeMove(move)
+
+	movedSide := cmn.GetOpposite(b.SideToMove)
+
+	inCheck := b.IsSquareAttacked(int(b.KingSq[movedSide]), b.SideToMove)
+
+	b.UnmakeMove(move, undo)
+
+	return !inCheck
+}
+
 func (b *Board) GetPieceAt(sq int) cmn.PieceType {
 	for i := range 12 {
 		if (b.Pieces[i]>>sq)&1 != 0 {

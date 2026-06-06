@@ -10,11 +10,12 @@ func (b *Board) GenerateMoves() []cmn.Move {
 	moves := make([]cmn.Move, 0, 64)
 
 	b.generateKingMoves(&moves)
-	b.generateKnightMoves(&moves)
 	b.generatePawnMoves(&moves)
-	b.generateBishopMoves(&moves)
-	b.generateRookMoves(&moves)
-	b.generateQueenMoves(&moves)
+
+	b.generateMovesByPiece(&moves, cmn.Knight)
+	b.generateMovesByPiece(&moves, cmn.Bishop)
+	b.generateMovesByPiece(&moves, cmn.Rook)
+	b.generateMovesByPiece(&moves, cmn.Queen)
 
 	return moves
 }
@@ -25,15 +26,8 @@ func (b *Board) GenerateLegalMoves() []cmn.Move {
 	pseudo := b.GenerateMoves()
 
 	for _, move := range pseudo {
-		undo := b.MakeMove(move)
-
-		movedSide := cmn.GetOpposite(b.SideToMove)
-
-		inCheck := b.IsSquareAttacked(int(b.KingSq[movedSide]), b.SideToMove)
-
-		b.UnmakeMove(move, undo)
-
-		if !inCheck {
+		valid := b.isLegalMove(move)
+		if valid {
 			legal = append(legal, move)
 		}
 	}
@@ -207,29 +201,9 @@ func (b *Board) generateCastlingMoves(moves *[]cmn.Move) {
 	}
 }
 
-func (b *Board) generateKnightMoves(moves *[]cmn.Move) {
+func (b *Board) generateMovesByPiece(moves *[]cmn.Move, piece cmn.PieceType) {
 	color := b.SideToMove
-	index := int(cmn.Knight)
-	if color == cmn.Black {
-		index += 6
-	}
-
-	bb := b.Pieces[index]
-	for bb != 0 {
-		from := bits.TrailingZeros64(uint64(bb))
-		attacks := cmn.KnightAttacks[from]
-		attacks &= ^b.Occupancy[color]
-
-		b.iterateMoves(from, attacks, cmn.Knight, moves)
-
-		bb &= bb - 1
-	}
-}
-
-func (b *Board) generateBishopMoves(moves *[]cmn.Move) {
-	color := b.SideToMove
-
-	index := cmn.Bishop
+	index := piece
 	if color == cmn.Black {
 		index += 6
 	}
@@ -239,51 +213,22 @@ func (b *Board) generateBishopMoves(moves *[]cmn.Move) {
 	for bb != 0 {
 		from := bits.TrailingZeros64(uint64(bb))
 
-		attacks := b.getBishopAttacks(from)
-		attacks &= ^b.Occupancy[color]
+		var attacks cmn.Bitboard
 
-		b.iterateMoves(from, attacks, cmn.Bishop, moves)
+		switch piece {
+		case cmn.Knight:
+			attacks = cmn.KnightAttacks[from]
 
-		bb &= bb - 1
-	}
-}
+		case cmn.Bishop:
+			attacks = b.getBishopAttacks(from)
 
-func (b *Board) generateRookMoves(moves *[]cmn.Move) {
-	color := b.SideToMove
+		case cmn.Rook:
+			attacks = b.getRookAttacks(from)
 
-	index := cmn.Rook
-	if color == cmn.Black {
-		index += 6
-	}
+		case cmn.Queen:
+			attacks = b.getRookAttacks(from) | b.getBishopAttacks(from)
+		}
 
-	bb := b.Pieces[index]
-
-	for bb != 0 {
-		from := bits.TrailingZeros64(uint64(bb))
-
-		attacks := b.getRookAttacks(from)
-		attacks &= ^b.Occupancy[color]
-
-		b.iterateMoves(from, attacks, cmn.Rook, moves)
-
-		bb &= bb - 1
-	}
-}
-
-func (b *Board) generateQueenMoves(moves *[]cmn.Move) {
-	color := b.SideToMove
-
-	index := cmn.Queen
-	if color == cmn.Black {
-		index += 6
-	}
-
-	bb := b.Pieces[index]
-
-	for bb != 0 {
-		from := bits.TrailingZeros64(uint64(bb))
-
-		attacks := b.getRookAttacks(from) | b.getBishopAttacks(from)
 		attacks &= ^b.Occupancy[color]
 
 		b.iterateMoves(from, attacks, cmn.Queen, moves)
@@ -294,7 +239,6 @@ func (b *Board) generateQueenMoves(moves *[]cmn.Move) {
 
 func (b *Board) generatePawnMoves(moves *[]cmn.Move) {
 	color := b.SideToMove
-	enemy := cmn.GetOpposite(color)
 	forward := 8
 	index := cmn.Pawn
 
@@ -340,60 +284,7 @@ func (b *Board) generatePawnMoves(moves *[]cmn.Move) {
 		b.iteratePawnMoves(doublePush, forward*2, moves)
 	}
 
-	var left, right cmn.Bitboard
-
-	if color == cmn.White {
-		left = (pawns << 7) & cmn.NotHFile
-		right = (pawns << 9) & cmn.NotAFile
-
-		leftProm := left & cmn.Rank8 & b.Occupancy[enemy]
-		rightProm := right & cmn.Rank8 & b.Occupancy[enemy]
-
-		leftNorm := left & ^cmn.Rank8 & b.Occupancy[enemy]
-		rightNorm := right & ^cmn.Rank8 & b.Occupancy[enemy]
-
-		b.iteratePawnCaptures(leftNorm, 7, moves)
-		b.iteratePawnCaptures(rightNorm, 9, moves)
-
-		b.iteratePawnPromotions(leftProm, 7, true, moves)
-		b.iteratePawnPromotions(rightProm, 9, true, moves)
-
-		if b.EnPassant != -1 {
-			epBB := cmn.Bitboard(1) << b.EnPassant
-
-			leftEP := left & epBB
-			rightEP := right & epBB
-
-			b.iterateEnPassant(leftEP, 7, moves)
-			b.iterateEnPassant(rightEP, 9, moves)
-		}
-
-	} else {
-		left = (pawns >> 9) & cmn.NotHFile
-		right = (pawns >> 7) & cmn.NotAFile
-
-		leftProm := left & cmn.Rank1 & b.Occupancy[enemy]
-		rightProm := right & cmn.Rank1 & b.Occupancy[enemy]
-
-		leftNorm := left & ^cmn.Rank1 & b.Occupancy[enemy]
-		rightNorm := right & ^cmn.Rank1 & b.Occupancy[enemy]
-
-		b.iteratePawnCaptures(leftNorm, -9, moves)
-		b.iteratePawnCaptures(rightNorm, -7, moves)
-
-		b.iteratePawnPromotions(leftProm, -9, true, moves)
-		b.iteratePawnPromotions(rightProm, -7, true, moves)
-
-		if b.EnPassant != -1 {
-			epBB := cmn.Bitboard(1) << b.EnPassant
-
-			leftEP := left & epBB
-			rightEP := right & epBB
-
-			b.iterateEnPassant(leftEP, -9, moves)
-			b.iterateEnPassant(rightEP, -7, moves)
-		}
-	}
+	b.generatePawnCaptures(moves)
 }
 
 func (b *Board) iteratePawnPromotions(bb cmn.Bitboard, offset int, isCapture bool, moves *[]cmn.Move) {

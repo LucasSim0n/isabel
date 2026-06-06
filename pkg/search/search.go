@@ -25,7 +25,7 @@ func (s *Searcher) Search(b *board.Board, depth, alpha, beta int) int {
 	}
 
 	if depth == 0 {
-		return Evaluate(b)
+		return s.Quiescence(b, alpha, beta)
 	}
 
 	moves := b.GenerateLegalMoves()
@@ -137,4 +137,37 @@ func (s *Searcher) FindBestMove(b *board.Board, depth int) (cmn.Move, error) {
 	}
 
 	return bestMove, nil
+}
+
+func (s *Searcher) Quiescence(b *board.Board, alpha, beta int) int {
+
+	standPat := Evaluate(b)
+
+	if standPat >= beta {
+		return beta
+	}
+
+	if standPat > alpha {
+		alpha = standPat
+	}
+
+	captures := b.GenerateLegalCaptures()
+
+	for _, move := range captures {
+		undo := b.MakeMove(move)
+
+		score := -s.Quiescence(b, -beta, -alpha)
+
+		b.UnmakeMove(move, undo)
+
+		if score >= beta {
+			return beta
+		}
+
+		if score > alpha {
+			alpha = score
+		}
+	}
+
+	return alpha
 }
