@@ -25,7 +25,7 @@ func (g *GameManager) Loop() {
 			fmt.Println("readyok")
 
 		case line == "ucinewgame":
-			g.board = board.NewStartPosGame()
+			g.Board = board.NewStartPosGame()
 
 		case strings.HasPrefix(line, "position"):
 			g.HandlePosition(line)
@@ -62,7 +62,7 @@ func (g *GameManager) HandlePosition(cmd string) {
 
 	switch tokens[1] {
 	case "startpos":
-		g.board = board.NewStartPosGame()
+		g.Board = board.NewStartPosGame()
 
 	case "fen":
 		var fen strings.Builder
@@ -79,7 +79,7 @@ func (g *GameManager) HandlePosition(cmd string) {
 		if err != nil {
 			log.Fatalf("Error parsing fen: %s\n", err)
 		}
-		g.board = b
+		g.Board = b
 	}
 
 	if idx == -1 {
@@ -88,7 +88,7 @@ func (g *GameManager) HandlePosition(cmd string) {
 
 	for _, moveStr := range tokens[idx+1:] {
 		move, _ := g.parseMove(moveStr)
-		g.board.MakeMove(move)
+		g.Board.MakeMove(move)
 	}
 }
 
@@ -105,11 +105,6 @@ func (g *GameManager) HandleGo(cmd string) {
 		}
 	}
 
-	move, err := g.searcher.FindBestMove(g.board, depth)
-	if err != nil {
-		fmt.Println("bestmove 0000")
-		return
-	}
-
+	move := g.Searcher.FindBestMove(g.Board, depth)
 	fmt.Printf("bestmove %s\n", move.String())
 }

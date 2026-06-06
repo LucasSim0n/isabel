@@ -1,8 +1,6 @@
 package search
 
 import (
-	"errors"
-
 	"github.com/LucasSim0n/isabel/pkg/board"
 	"github.com/LucasSim0n/isabel/pkg/cmn"
 	"github.com/LucasSim0n/isabel/pkg/tt"
@@ -16,6 +14,15 @@ func NewSearcher() *Searcher {
 	return &Searcher{
 		tt: tt.NewTT(),
 	}
+}
+
+func (s *Searcher) FindBestMove(b *board.Board, maxDepth int) cmn.Move {
+	var move cmn.Move
+
+	for depth := 1; depth <= maxDepth; depth++ {
+		move = s.searchRoot(b, depth)
+	}
+	return move
 }
 
 func (s *Searcher) Search(b *board.Board, depth, alpha, beta int) int {
@@ -100,12 +107,8 @@ func (s *Searcher) Search(b *board.Board, depth, alpha, beta int) int {
 	return bestScore
 }
 
-func (s *Searcher) FindBestMove(b *board.Board, depth int) (cmn.Move, error) {
+func (s *Searcher) searchRoot(b *board.Board, depth int) cmn.Move {
 	moves := b.GenerateLegalMoves()
-
-	if len(moves) == 0 {
-		return cmn.Move{}, errors.New("No legal moves found")
-	}
 
 	bestScore := -cmn.Infinity
 	bestMove := moves[0]
@@ -114,15 +117,9 @@ func (s *Searcher) FindBestMove(b *board.Board, depth int) (cmn.Move, error) {
 	beta := cmn.Infinity
 
 	for _, move := range moves {
-
 		undo := b.MakeMove(move)
 
-		score := -s.Search(
-			b,
-			depth-1,
-			-beta,
-			-alpha,
-		)
+		score := -s.Search(b, depth-1, -beta, -alpha)
 
 		b.UnmakeMove(move, undo)
 
@@ -136,7 +133,7 @@ func (s *Searcher) FindBestMove(b *board.Board, depth int) (cmn.Move, error) {
 		}
 	}
 
-	return bestMove, nil
+	return bestMove
 }
 
 func (s *Searcher) Quiescence(b *board.Board, alpha, beta int) int {

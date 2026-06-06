@@ -7,14 +7,14 @@ import (
 )
 
 type GameManager struct {
-	board    *board.Board
-	searcher *search.Searcher
+	Board    *board.Board
+	Searcher *search.Searcher
 }
 
 func NewGameManager() *GameManager {
 	return &GameManager{
-		board:    board.NewStartPosGame(),
-		searcher: search.NewSearcher(),
+		Board:    board.NewStartPosGame(),
+		Searcher: search.NewSearcher(),
 	}
 }
 
@@ -30,7 +30,7 @@ func (g *GameManager) parseMove(moveStr string) (cmn.Move, error) {
 		return cmn.Move{}, err
 	}
 
-	p := g.board.GetPieceAt(from)
+	p := g.Board.GetPieceAt(from)
 
 	m := cmn.Move{
 		From:  from,
@@ -39,9 +39,9 @@ func (g *GameManager) parseMove(moveStr string) (cmn.Move, error) {
 	}
 
 	toBB := cmn.Bitboard(1 << to)
-	enemy := cmn.GetOpposite(g.board.SideToMove)
-	if g.board.Occupancy[enemy]&toBB != 0 {
-		m.Capture = g.board.GetPieceAt(to)
+	enemy := cmn.GetOpposite(g.Board.SideToMove)
+	if g.Board.Occupancy[enemy]&toBB != 0 {
+		m.Capture = g.Board.GetPieceAt(to)
 		m.Flags |= cmn.FlagCapture
 	}
 
@@ -52,7 +52,7 @@ func (g *GameManager) parseMove(moveStr string) (cmn.Move, error) {
 			m.Flags |= cmn.FlagDoublePawnPush
 		}
 
-		if to == g.board.EnPassant {
+		if to == g.Board.EnPassant {
 			m.Flags |= cmn.FlagEnPassant
 		}
 	}

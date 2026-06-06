@@ -231,7 +231,7 @@ func (b *Board) generateMovesByPiece(moves *[]cmn.Move, piece cmn.PieceType) {
 
 		attacks &= ^b.Occupancy[color]
 
-		b.iterateMoves(from, attacks, cmn.Queen, moves)
+		b.iterateMoves(from, attacks, piece, moves)
 
 		bb &= bb - 1
 	}
