@@ -25,44 +25,33 @@ func (s *Searcher) FindBestMove(b *board.Board, maxDepth int) cmn.Move {
 	return move
 }
 
-func (s *Searcher) Search(b *board.Board, depth, alpha, beta int) int {
+func (s *Searcher) Search(b *board.Board, depth, alpha, beta, ply int) int {
 
 	if entry, ok := s.tt.Probe(b.Hash, depth, alpha, beta); ok {
 		return entry.Score
 	}
 
 	if depth == 0 {
-		return s.Quiescence(b, alpha, beta)
+		return s.Quiescence(b, alpha, beta, ply+1)
 	}
 
 	moves := b.GenerateLegalMoves()
-
 	if len(moves) == 0 {
 		inCheck := b.IsSquareAttacked(int(b.KingSq[b.SideToMove]), cmn.GetOpposite(b.SideToMove))
-
 		if inCheck {
-			return -cmn.MateScore
+			return -(cmn.MateScore - ply)
 		}
 
 		return 0
 	}
 
 	var ttMove cmn.Move
-	hasTTMove := false
 
 	if entry, ok := s.tt.Get(b.Hash); ok {
 		ttMove = entry.Move
-		hasTTMove = true
 	}
 
-	if hasTTMove {
-		for i, move := range moves {
-			if ttMove == move {
-				moves[0], moves[i] = moves[i], moves[0]
-				break
-			}
-		}
-	}
+	sortMoves(moves, ttMove)
 
 	bestScore := -cmn.Infinity
 	var bestMove cmn.Move
@@ -76,6 +65,7 @@ func (s *Searcher) Search(b *board.Board, depth, alpha, beta int) int {
 			depth-1,
 			-beta,
 			-alpha,
+			ply+1,
 		)
 
 		b.UnmakeMove(move, undo)
@@ -119,7 +109,7 @@ func (s *Searcher) searchRoot(b *board.Board, depth int) cmn.Move {
 	for _, move := range moves {
 		undo := b.MakeMove(move)
 
-		score := -s.Search(b, depth-1, -beta, -alpha)
+		score := -s.Search(b, depth-1, -beta, -alpha, 0)
 
 		b.UnmakeMove(move, undo)
 
@@ -136,7 +126,7 @@ func (s *Searcher) searchRoot(b *board.Board, depth int) cmn.Move {
 	return bestMove
 }
 
-func (s *Searcher) Quiescence(b *board.Board, alpha, beta int) int {
+func (s *Searcher) Quiescence(b *board.Board, alpha, beta, ply int) int {
 
 	standPat := Evaluate(b)
 
@@ -149,11 +139,19 @@ func (s *Searcher) Quiescence(b *board.Board, alpha, beta int) int {
 	}
 
 	captures := b.GenerateLegalCaptures()
+	if len(captures) == 0 {
+		inCheck := b.IsSquareAttacked(int(b.KingSq[b.SideToMove]), cmn.GetOpposite(b.SideToMove))
+		if inCheck {
+			return -(cmn.MateScore - ply)
+		}
+	}
+
+	sortMoves(captures, cmn.Move{})
 
 	for _, move := range captures {
 		undo := b.MakeMove(move)
 
-		score := -s.Quiescence(b, -beta, -alpha)
+		score := -s.Quiescence(b, -beta, -alpha, ply+1)
 
 		b.UnmakeMove(move, undo)
 
