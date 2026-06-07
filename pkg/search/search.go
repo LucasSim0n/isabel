@@ -7,7 +7,8 @@ import (
 )
 
 type Searcher struct {
-	tt *tt.TranspositionTable
+	tt      *tt.TranspositionTable
+	killers [64][2]cmn.Move
 }
 
 func NewSearcher() *Searcher {
@@ -51,7 +52,7 @@ func (s *Searcher) Search(b *board.Board, depth, alpha, beta, ply int) int {
 		ttMove = entry.Move
 	}
 
-	sortMoves(moves, ttMove)
+	s.sortMoves(moves, ttMove, ply)
 
 	bestScore := -cmn.Infinity
 	var bestMove cmn.Move
@@ -80,6 +81,12 @@ func (s *Searcher) Search(b *board.Board, depth, alpha, beta, ply int) int {
 		}
 
 		if alpha >= beta {
+
+			if move.Flags&cmn.FlagCapture == 0 {
+				s.killers[ply][1] = s.killers[ply][0]
+				s.killers[ply][0] = move
+			}
+
 			break
 		}
 	}
@@ -146,7 +153,7 @@ func (s *Searcher) Quiescence(b *board.Board, alpha, beta, ply int) int {
 		}
 	}
 
-	sortMoves(captures, cmn.Move{})
+	s.sortMoves(captures, cmn.Move{}, ply)
 
 	for _, move := range captures {
 		undo := b.MakeMove(move)

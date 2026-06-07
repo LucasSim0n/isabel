@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/LucasSim0n/isabel/pkg/board"
+	"github.com/LucasSim0n/isabel/pkg/search"
 )
 
 func (g *GameManager) Loop() {
@@ -107,4 +108,5 @@ func (g *GameManager) HandleGo(cmd string) {
 
 	move := g.Searcher.FindBestMove(g.Board, depth)
 	fmt.Printf("bestmove %s\n", move.String())
+	fmt.Println(search.Evaluate(g.Board))
 }
